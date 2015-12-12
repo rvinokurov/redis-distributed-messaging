@@ -17,10 +17,12 @@ let subscriber;
 
 let isMaster = false;
 
+let resetPing = null;
+let nextNodePingTimeout = null;
+
 const nodeName = `${os.hostname()}_${pid}`;
 
 const processPingMessage = (message) => {
-    console.log(message);
     publisher.publish(`${message.node}:pong`, JSON.stringify({node: nodeName}));
     console.log('pong from node', nodeName);
 };
@@ -31,16 +33,25 @@ const processNewNodeMessage = (message) => {
     logger.info('registered new node. Node List Now', nodeList)
 };
 
+const processPongMessage = (message) => {
+    clearTimeout(nextNodePingTimeout);
+    setTimeout(resetPing, 3000);
+};
 
 const processKillMessage = (message) => {
     logger.info('Recieved kill message. Shutdown');
     process.exit(0);
 };
 
+const processUpdateNodeList = (message) => {
+
+    nodeList = message.nodeList;
+    nodeInfo = message.nodeInfo;
+    console.log('update node list', nodeInfo);
+};
 
 
 const processMessages = (channel, message) => {
-    console.log(channel, message);
     try {
         message = JSON.parse(message);
     } catch (e) {
@@ -58,6 +69,12 @@ const processMessages = (channel, message) => {
     }
     if(channel === 'kill') {
         processKillMessage(message);
+    }
+    if(channel === `${nodeName}:pong`) {
+        processPongMessage(message);
+    }
+    if(channel === 'updatenodelist') {
+        processUpdateNodeList(message);
     }
 };
 
@@ -77,13 +94,31 @@ const getNextNode = () => {
     return myIndex + 1 == nodeList.length ? nodeList[0] : nodeList[myIndex + 1];
 };
 
-const tryToPingNextNode = () => {
+const tryToPingNextNode = (next) => {
     let nextNode = getNextNode();
     if(nextNode === nodeName) {
-        return;
+        setTimeout(next, 3000);
     } else {
-        publisher.publish(`${nextNode}:ping`, JSON.stringify({node: nodeName}));
+
+        resetPing = next;
+        nextNodePingTimeout = setTimeout(() => {
+            console.log('node dead', nextNode);
+            nodeList = _.without(nodeList, nextNode);
+            if(nodeInfo[nextNode]) {
+                nodeInfo[nodeName] = true;
+                logger.info(`new master is ${nodeName}`);
+                //start broadcast
+            }
+            delete nodeInfo[nodeList]; //check if nextNode is master
+
+            console.log('current node list', nodeList);
+            publisher.set('nodelist', JSON.stringify(nodeList));
+            publisher.set('nodeinfo', JSON.stringify(nodeInfo));
+            publisher.publish(`updatenodelist`, JSON.stringify({nodeList, nodeInfo}));
+            next(null);
+        }, 3000);
         console.log('ping node', nextNode);
+        publisher.publish(`${nextNode}:ping`, JSON.stringify({node: nodeName}));
     }
 };
 
@@ -133,14 +168,15 @@ async.series([
         callback(null);
     },
     callback => subscriber.subscribe(`${nodeName}:ping`, callback),
-    callback => subscriber.subscribe(`newnode`, callback),
-    callback => subscriber.subscribe(`kill`, callback),
+    callback => subscriber.subscribe(`${nodeName}:pong`, callback),
+    callback => subscriber.subscribe('newnode', callback),
+    callback => subscriber.subscribe('kill', callback),
+    callback => subscriber.subscribe('updatenodelist', callback),
     (callback) => {
         subscriber.on('message', processMessages)
         callback(null);
     },
     (callback) => {
-        console.log(nodeList);
         if(!nodeList.length) {
             logger.info('start message generator');
             isMaster = true;
@@ -155,8 +191,8 @@ async.series([
         publisher.set('nodelist', JSON.stringify(nodeList));
         publisher.set('nodeinfo', JSON.stringify(nodeInfo));
 
-        tryToPingNextNode();
-        setInterval(tryToPingNextNode, 3000);
+
+        async.forever(tryToPingNextNode)
     }
 
 
