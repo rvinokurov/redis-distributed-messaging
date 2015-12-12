@@ -1,0 +1,34 @@
+{
+  "name": "redis-distributed-messaging",
+  "version": "0.0.1",
+  "description": "Redis Distributed Messaging Example App",
+  "engines": {
+    "node": "5.1.0"
+  },
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/rvinokurov/redis-distributed-messaging.git"
+  },
+  "keywords": [
+    "redis",
+    "nodejs",
+    "node"
+  ],
+  "author": "Roman Vinokurov",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/rvinokurov/redis-distributed-messaging/issues"
+  },
+  "homepage": "https://github.com/rvinokurov/redis-distributed-messaging",
+  "dependencies": {
+    "async": "1.5.0",
+    "bunyan": "1.5.1",
+    "minimist": "1.2.0",
+    "redis": "2.4.2",
+    "underscore": "1.8.3"
+  }
+}
