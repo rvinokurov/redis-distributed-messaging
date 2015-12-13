@@ -11,6 +11,7 @@ var argv = require('minimist')(process.argv.slice(2));
 const MessageEmitter = require('./lib/message-emitter.js');
 const MessageManager = require('./lib/message-manager.js');
 const NodeManager = require('./lib/node-manager.js');
+const clearErrorQueue = require('./lib/clear-error-queue.js')
 
 
 let scope = {
@@ -49,7 +50,13 @@ const initRedisConnections  = (callback) => {
 async.series([
     initRedisConnections,
     (callback) => {
-        if(argv.flush) {
+         if(argv.getErrors) {
+             logger.info('Start to get and clear errors queue...');
+             clearErrorQueue(scope, () => {
+                 logger.info('Error queue cleared, exit');
+                 process.exit(0);
+             })
+        } else if(argv.flush) {
             logger.info('Clear node information, send kill message to other nodes..');
             scope.publisher.flushdb(callback);
             scope.publisher.publish('kill', JSON.stringify({node: scope.nodeName}));
