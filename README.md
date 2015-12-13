@@ -38,10 +38,10 @@ node app.js --getErrors | bunyan
 * redis - redis connection parameters
 * MessageGenerator
   * sendInterval - interval to send stub messages
-  * deliveryTimeoutTime - Time to wait for delivery message response from node. On timeout node marked as dead and removes from node list
-  * sendNextMessageOnDelivery - if true, next message sends when delivery response recieved on timeout. Otherwise each next message sends on fixed interval `sendInterval`
+  * deliveryTimeoutTime - Time to wait for delivery message response from node. On timeout  removes from node list
+  * sendNextMessageOnDelivery - if true, every next message sends when delivery response recieved on timeout. Otherwise every next message sends with fixed interval `sendInterval`
 * NodeManager
-  * pingInterval - fixed interval to send `ping` to closest next node. Each node ping next node clockwise
+  * pingInterval - fixed interval to send `ping` to closest next node. Each node pings next node clockwise
 * clearErrorQueue
   * concurrency - number of parallel LPOP requests to redis
 * MessageEmitter
