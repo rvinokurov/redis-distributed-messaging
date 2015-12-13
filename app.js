@@ -23,8 +23,6 @@ let publisher;
 let subscriber;
 
 
-let resetPing = null;
-let nextNodePingTimeout = null;
 
 scope.nodeName = `${os.hostname()}_${process.pid}`;
 
@@ -41,33 +39,6 @@ let messageManager = null;
 
 
 
-// const processMessages = (channel, message) => {
-//     try {
-//         message = JSON.parse(message);
-//     } catch (e) {
-//         logger.error('Error on parse message', {error: e})
-//     }
-//
-//     if(message.node === nodeName) {
-//         return;
-//     }
-//     if(channel === `${nodeName}:ping`) {
-//         processPingMessage(message);
-//     }
-//     if(channel === 'newnode') {
-//         processNewNodeMessage(message);
-//     }
-//     if(channel === 'kill') {
-//         processKillMessage(message);
-//     }
-//     if(channel === `${nodeName}:pong`) {
-//         processPongMessage(message);
-//     }
-//     if(channel === 'updatenodelist') {
-//         processUpdateNodeList(message);
-//     }
-// };
-
 const initRedisConnections  = (callback) => {
     async.parallel({
         publisher: redis.getConnection.bind(null, 'publisher'),
@@ -79,38 +50,47 @@ const initRedisConnections  = (callback) => {
     });
 };
 
-// const getNextNode = () => {
-//     let myIndex = _.indexOf(nodeList, nodeName);
-//     return myIndex + 1 == nodeList.length ? nodeList[0] : nodeList[myIndex + 1];
-// };
+const getNextNode = () => {
+    let nodeList = scope.nodeList,
+        nodeName = scope.nodeName;
+    let myIndex = _.indexOf(nodeList, nodeName);
+    return myIndex + 1 == nodeList.length ? nodeList[0] : nodeList[myIndex + 1];
+};
 
-// const tryToPingNextNode = (next) => {
-//     let nextNode = getNextNode();
-//     if(nextNode === nodeName) {
-//         setTimeout(next, 3000);
-//     } else {
-//
-//         resetPing = next;
-//         nextNodePingTimeout = setTimeout(() => {
-//             console.log('node dead', nextNode);
-//             nodeList = _.without(nodeList, nextNode);
-//             if(nodeInfo[nextNode]) {
-//                 nodeInfo[nodeName] = true;
-//                 logger.info(`new master is ${nodeName}`);
-//                 //start broadcast
-//             }
-//             delete nodeInfo[nodeList]; //check if nextNode is master
-//
-//             console.log('current node list', nodeList);
-//             publisher.set('nodelist', JSON.stringify(nodeList));
-//             publisher.set('nodeinfo', JSON.stringify(nodeInfo));
-//             publisher.publish(`updatenodelist`, JSON.stringify({nodeList, nodeInfo}));
-//             next(null);
-//         }, 3000);
-//         console.log('ping node', nextNode);
-//         publisher.publish(`${nextNode}:ping`, JSON.stringify({node: nodeName}));
-//     }
-// };
+const tryToPingNextNode = (next) => {
+    let nodeName = scope.nodeName,
+        nodeList = scope.nodeList,
+        nodeInfo = scope.nodeInfo,
+        publisher = scope.publisher;
+
+    let nextNode = getNextNode();
+    if(nextNode === nodeName) {
+        setTimeout(next, 1000);
+    } else {
+        let nextNodePingTimeout = setTimeout(() => {
+            console.log('node dead', nextNode);
+            nodeList = _.without(nodeList, nextNode);
+            if(scope.nodeInfo[nextNode]) {
+                scope.nodeInfo[nodeName] = true;
+                logger.info(`new master is ${nodeName}`);
+                //start broadcast
+            }
+            delete scope.nodeInfo[nextNode]; //check if nextNode is master
+
+            console.log('current node list', nodeList);
+            publisher.set('nodelist', JSON.stringify(nodeList));
+            publisher.set('nodeinfo', JSON.stringify(nodeInfo));
+            publisher.publish(`updatenodelist`, JSON.stringify({nodeList, nodeInfo}));
+            next(null);
+        }, 1000);
+        console.log('ping node', nextNode);
+        messageEmitter.once(`${nodeName}:pong`, () => {
+            clearTimeout(nextNodePingTimeout);
+            setTimeout(next, 1000);
+        });
+        publisher.publish(`${nextNode}:ping`, JSON.stringify({node: nodeName}));
+    }
+};
 
 
 
@@ -173,10 +153,14 @@ async.series([
         }
         scope.nodeList.push(scope.nodeName);
         scope.nodeInfo[scope.nodeName] = isMaster;
-
+        console.log(scope.nodeInfo);
         scope.publisher.set('nodelist', JSON.stringify(scope.nodeList));
         scope.publisher.set('nodeinfo', JSON.stringify(scope.nodeInfo));
 
-        // async.forever(tryToPingNextNode)
+        messageEmitter.subscribe([`${scope.nodeName}:pong`], () => {
+            async.forever(tryToPingNextNode)
+        });
+
+
     }
 ]);
