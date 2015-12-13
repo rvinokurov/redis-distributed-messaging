@@ -32,3 +32,11 @@ node app.js | bunyan
 ```
 node app.js --getErrors | bunyan
 ```
+
+## TODO
+* Migrate to Babel
+* Use Promise instead async module and ES7 async/await
+* Add comments all public methods
+* Add unit tests, using Mocha test framework, Chai, Sinon
+* Add highload benchmarks
+
