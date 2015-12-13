@@ -33,6 +33,21 @@ node app.js | bunyan
 node app.js --getErrors | bunyan
 ```
 
+## Config sections and options:
+
+* redis - redis connection parameters
+* MessageGenerator
+  * sendInterval - interval to send stub messages
+  * deliveryTimeoutTime - Time to wait delivery message response from node, On timeout node marked as dead and deleted from node list
+  * sendNextMessageOnDelivery - if true, next message send when delivery response recieved on or timeout. Otherwise each next message sends on fixed interval `sendInterval`
+* NodeManager
+  * pingInterval - fixed interval to send `ping` to closest next node. Each node ping next node clockwise
+* clearErrorQueue
+  * concurrency - number of parallel LPOP requests to redis
+* MessageEmitter
+  * maxListeners - number of maxListeners on each channel. Best value depends on setInterval value and listener nodes count
+
+
 ## TODO
 * Migrate to Babel
 * Use `Promise` (Bluebird) instead `async` module and ES7 `async/await`
