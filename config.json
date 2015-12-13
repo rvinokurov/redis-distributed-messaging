@@ -17,5 +17,9 @@
 
     "clearErrorQueue": {
         "concurrency": 10
+    },
+
+    "MessageEmitter": {
+        "maxListeners": 50
     }
 }
