@@ -64,7 +64,7 @@ async.series([
         messageManager = new MessageManager(scope);
         messageEmitter.subscribe({
             [`${scope.nodeName}:ping`] : message => messageManager.ping(message),
-            // `${scope.nodeName}:pong`,
+            [`${scope.nodeName}:message`] : message => messageManager.message(message),
             'newnode':  message => messageManager.newNode(message),
             'kill': message => messageManager.kill(message),
             'updatenodelist': message => messageManager.updateNodeList(message),
