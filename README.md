@@ -18,7 +18,7 @@ npm i -g bunyan
 
 ## usage
 
-First, start master node. `--flush` option clears all info about runned nodes in redis and kills all runned nodes:
+First, start master node. `--flush` option clears all info about running nodes in redis and kills all running nodes:
 ```
 node app.js --flush | bunyan
 ```
