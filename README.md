@@ -11,7 +11,7 @@ cd redis-distributed-messaging
 npm i
 ```
 
-All log's output presents  in bunyan format, so you need to install bunyan globally:
+Entire log's output presents  in bunyan format, so you need to install bunyan globally:
 ```
 npm i -g bunyan 
 ```
