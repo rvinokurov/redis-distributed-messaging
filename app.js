@@ -2,7 +2,10 @@
 
 const minimist = require('minimist');
 const redis = require('./lib/redis.js');
-const logger = require('bunyan').createLogger({name: 'redis-distributed-messaging'});
+const logger = require('bunyan').createLogger({
+    name: 'redis-distributed-messaging',
+    level: 'trace'
+});
 const _ = require('underscore');
 const os = require('os');
 const async = require('async');
