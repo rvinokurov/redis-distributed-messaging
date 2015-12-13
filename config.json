@@ -3,5 +3,19 @@
         "host": "localhost",
         "port": 6379,
         "database": 1
+    },
+
+    "MessageGenerator": {
+        "sendInterval": 500,
+        "deliveryTimeoutTime": 2000,
+        "sendNextMessageOnDelivery": false
+    },
+
+    "NodeManager": {
+        "pingInterval": 3000
+    },
+
+    "clearErrorQueue": {
+        "concurrency": 10
     }
 }
