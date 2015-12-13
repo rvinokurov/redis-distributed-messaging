@@ -6,154 +6,142 @@ const logger = require('bunyan').createLogger({name: 'redis-distributed-messagin
 const _ = require('underscore');
 const os = require('os');
 const async = require('async');
+
 var argv = require('minimist')(process.argv.slice(2));
+const MessageEmitter = require('./lib/message-emitter.js');
+const MessageManager = require('./lib/message-manager.js');
 
-const pid = process.pid;
+let scope = {
+    nodeList: [],
+    nodeInfo: [],
+    logger: logger
+};
 
-logger.info('app started', {pid});
+logger.info('app started', {pid: process.pid});
 
 let publisher;
 let subscriber;
 
-let isMaster = false;
 
 let resetPing = null;
 let nextNodePingTimeout = null;
 
-const nodeName = `${os.hostname()}_${pid}`;
+scope.nodeName = `${os.hostname()}_${process.pid}`;
 
-const processPingMessage = (message) => {
-    publisher.publish(`${message.node}:pong`, JSON.stringify({node: nodeName}));
-    console.log('pong from node', nodeName);
-};
-
-const processNewNodeMessage = (message) => {
-    nodeList.push(message.node);
-    nodeInfo[message.node] = 0;
-    logger.info('registered new node. Node List Now', nodeList)
-};
-
-const processPongMessage = (message) => {
-    clearTimeout(nextNodePingTimeout);
-    setTimeout(resetPing, 3000);
-};
-
-const processKillMessage = (message) => {
-    logger.info('Recieved kill message. Shutdown');
-    process.exit(0);
-};
-
-const processUpdateNodeList = (message) => {
-
-    nodeList = message.nodeList;
-    nodeInfo = message.nodeInfo;
-    console.log('update node list', nodeInfo);
-};
+let messageEmitter = null;
+let messageManager = null;
 
 
-const processMessages = (channel, message) => {
-    try {
-        message = JSON.parse(message);
-    } catch (e) {
-        logger.error('Error on parse message', {error: e})
-    }
 
-    if(message.node === nodeName) {
-        return;
-    }
-    if(channel === `${nodeName}:ping`) {
-        processPingMessage(message);
-    }
-    if(channel === 'newnode') {
-        processNewNodeMessage(message);
-    }
-    if(channel === 'kill') {
-        processKillMessage(message);
-    }
-    if(channel === `${nodeName}:pong`) {
-        processPongMessage(message);
-    }
-    if(channel === 'updatenodelist') {
-        processUpdateNodeList(message);
-    }
-};
+
+// const processPongMessage = (message) => {
+//     clearTimeout(nextNodePingTimeout);
+//     setTimeout(resetPing, 3000);
+// };
+
+
+
+// const processMessages = (channel, message) => {
+//     try {
+//         message = JSON.parse(message);
+//     } catch (e) {
+//         logger.error('Error on parse message', {error: e})
+//     }
+//
+//     if(message.node === nodeName) {
+//         return;
+//     }
+//     if(channel === `${nodeName}:ping`) {
+//         processPingMessage(message);
+//     }
+//     if(channel === 'newnode') {
+//         processNewNodeMessage(message);
+//     }
+//     if(channel === 'kill') {
+//         processKillMessage(message);
+//     }
+//     if(channel === `${nodeName}:pong`) {
+//         processPongMessage(message);
+//     }
+//     if(channel === 'updatenodelist') {
+//         processUpdateNodeList(message);
+//     }
+// };
 
 const initRedisConnections  = (callback) => {
     async.parallel({
         publisher: redis.getConnection.bind(null, 'publisher'),
         subscriber: redis.getConnection.bind(null,'subscriber')
     }, (error, result) => {
-        publisher = result.publisher;
-        subscriber = result.subscriber;
+        scope.publisher = result.publisher;
+        scope.subscriber = result.subscriber;
         callback(error);
     });
 };
 
-const getNextNode = () => {
-    let myIndex = _.indexOf(nodeList, nodeName);
-    return myIndex + 1 == nodeList.length ? nodeList[0] : nodeList[myIndex + 1];
-};
+// const getNextNode = () => {
+//     let myIndex = _.indexOf(nodeList, nodeName);
+//     return myIndex + 1 == nodeList.length ? nodeList[0] : nodeList[myIndex + 1];
+// };
 
-const tryToPingNextNode = (next) => {
-    let nextNode = getNextNode();
-    if(nextNode === nodeName) {
-        setTimeout(next, 3000);
-    } else {
+// const tryToPingNextNode = (next) => {
+//     let nextNode = getNextNode();
+//     if(nextNode === nodeName) {
+//         setTimeout(next, 3000);
+//     } else {
+//
+//         resetPing = next;
+//         nextNodePingTimeout = setTimeout(() => {
+//             console.log('node dead', nextNode);
+//             nodeList = _.without(nodeList, nextNode);
+//             if(nodeInfo[nextNode]) {
+//                 nodeInfo[nodeName] = true;
+//                 logger.info(`new master is ${nodeName}`);
+//                 //start broadcast
+//             }
+//             delete nodeInfo[nodeList]; //check if nextNode is master
+//
+//             console.log('current node list', nodeList);
+//             publisher.set('nodelist', JSON.stringify(nodeList));
+//             publisher.set('nodeinfo', JSON.stringify(nodeInfo));
+//             publisher.publish(`updatenodelist`, JSON.stringify({nodeList, nodeInfo}));
+//             next(null);
+//         }, 3000);
+//         console.log('ping node', nextNode);
+//         publisher.publish(`${nextNode}:ping`, JSON.stringify({node: nodeName}));
+//     }
+// };
 
-        resetPing = next;
-        nextNodePingTimeout = setTimeout(() => {
-            console.log('node dead', nextNode);
-            nodeList = _.without(nodeList, nextNode);
-            if(nodeInfo[nextNode]) {
-                nodeInfo[nodeName] = true;
-                logger.info(`new master is ${nodeName}`);
-                //start broadcast
-            }
-            delete nodeInfo[nodeList]; //check if nextNode is master
-
-            console.log('current node list', nodeList);
-            publisher.set('nodelist', JSON.stringify(nodeList));
-            publisher.set('nodeinfo', JSON.stringify(nodeInfo));
-            publisher.publish(`updatenodelist`, JSON.stringify({nodeList, nodeInfo}));
-            next(null);
-        }, 3000);
-        console.log('ping node', nextNode);
-        publisher.publish(`${nextNode}:ping`, JSON.stringify({node: nodeName}));
-    }
-};
 
 
-
-let nodeList = [];
-let nodeInfo = [];
 
 async.series([
     initRedisConnections,
     (callback) => {
         if(argv.flush) {
             logger.info('Clear node information, send kill message to other nodes..');
-            publisher.flushdb(callback);
-            publisher.publish('kill', JSON.stringify({node: nodeName}));
+            scope.publisher.flushdb(callback);
+            scope.publisher.publish('kill', JSON.stringify({node: scope.nodeName}));
         } else {
             callback(null);
         }
     },
     (callback) => {
         async.parallel({
-            nodeList : publisher.get.bind(publisher, 'nodelist'),
-            nodeInfo : publisher.get.bind(publisher, 'nodeinfo')
+            nodeList : scope.publisher.get.bind(scope.publisher, 'nodelist'),
+            nodeInfo : scope.publisher.get.bind(scope.publisher, 'nodeinfo')
         }, (error, result) => {
             if(result.nodeList) {
                 try {
-                    nodeList = JSON.parse(result.nodeList);
-                    nodeInfo = JSON.parse(result.nodeInfo);
+                    scope.nodeList = JSON.parse(result.nodeList);
+                    scope.nodeInfo = JSON.parse(result.nodeInfo);
                 } catch(e) {
-                    nodeList = []
-                    nodeInfo = {}
+                    scope.nodeList = []
+                    scope.nodeInfo = {}
                 }
             } else {
-                nodeList = []
-                nodeInfo = {}
+                scope.nodeList = []
+                scope.nodeInfo = {}
             }
 
 
@@ -161,40 +149,34 @@ async.series([
         })
 
     },
-    (callback) => {
-        subscriber.on("subscribe", (channel, count)  => {
-            logger.info("Subscribed to " + channel + ". Now subscribed to " + count + " channel(s).");
-        });
-        callback(null);
-    },
-    callback => subscriber.subscribe(`${nodeName}:ping`, callback),
-    callback => subscriber.subscribe(`${nodeName}:pong`, callback),
-    callback => subscriber.subscribe('newnode', callback),
-    callback => subscriber.subscribe('kill', callback),
-    callback => subscriber.subscribe('updatenodelist', callback),
-    (callback) => {
-        subscriber.on('message', processMessages)
-        callback(null);
+    callback => {
+
+        messageEmitter = new MessageEmitter(scope);
+        messageManager = new MessageManager(scope);
+        messageEmitter.subscribe({
+            [`${scope.nodeName}:ping`] : message => messageManager.ping(message),
+            // `${scope.nodeName}:pong`,
+            'newnode':  message => messageManager.newNode(message),
+            'kill': message => messageManager.kill(message),
+            'updatenodelist': message => messageManager.updateNodeList(message),
+        }, callback)
     },
     (callback) => {
-        if(!nodeList.length) {
-            logger.info('start message generator');
+        let isMaster = false;
+        if(!scope.nodeList.length) {
             isMaster = true;
+            logger.info('start message generator');
         } else {
             console.log('start message listener');
-            publisher.publish('newnode', JSON.stringify({node: nodeName}));
+            console.log('new node');
+            scope.publisher.publish('newnode', JSON.stringify({node: scope.nodeName}));
         }
-        nodeList.push(nodeName);
-        nodeInfo[nodeName] = isMaster;
+        scope.nodeList.push(scope.nodeName);
+        scope.nodeInfo[scope.nodeName] = isMaster;
 
+        scope.publisher.set('nodelist', JSON.stringify(scope.nodeList));
+        scope.publisher.set('nodeinfo', JSON.stringify(scope.nodeInfo));
 
-        publisher.set('nodelist', JSON.stringify(nodeList));
-        publisher.set('nodeinfo', JSON.stringify(nodeInfo));
-
-
-        async.forever(tryToPingNextNode)
+        // async.forever(tryToPingNextNode)
     }
-
-
-
 ]);
